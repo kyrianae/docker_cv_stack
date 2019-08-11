@@ -1,0 +1,110 @@
+version: "2"
+services:
+ traefik:
+    image: traefik:latest
+    #v1.1.2-alpine
+    ports:
+      - "80:80"
+      - "8080:8080"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /srv/docker/traefik/traefik.toml:/traefik.toml
+      - /srv/docker/traefik/acme:/etc/traefik/acme
+        #command: --web -c /dev/null  --docker --logLevel=INFO --docker.watch --acme --acme.OnHostRule=true --acme.storage=/etc/traefik/acme/acme.json --acme.email=aurelien@lavoweb.net --acme.entryPoint=https --entryPoints='Name:http Address::80' --entryPoints='Name:https Address::443 TLS' --defaultentrypoints=http,https --acme.domains="jorlando.fr"
+    restart: always
+    #    environment:
+    # - "affinity:container!=traefik*"
+    networks:
+      - web
+        #- internal
+    
+ influxdb:
+  image: influxdb:latest
+  container_name: influxdb
+  ports:
+  #  - "8091:2003"
+  #  - "8083:8083"
+    - "8086:8086"
+  #  - "8090:8090"
+  env_file:
+    - 'env.influxdb'
+  volumes:
+    # Data persistency
+    # sudo mkdir -p /srv/docker/influxdb/data
+    - /srv/docker/influxdb/data:/var/lib/influxdb
+      #networks:
+      #- internal
+  networks:
+          #- influx
+    - web
+
+ telegraf:
+  image: telegraf:latest
+  container_name: telegraf
+  #links:
+  #  - influxdb
+  volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+  networks:
+          #- influx
+    - web
+
+ grafana:
+  image: grafana/grafana:latest
+  container_name: grafana
+  #  ports:
+  #  - "3000:3000"
+  env_file:
+    - 'env.grafana'
+  volumes:
+    # Data persistency
+    # sudo mkdir -p /srv/docker/grafana/data; chown 472:472 /srv/docker/grafana/data
+    - /srv/docker/grafana/data:/var/lib/grafana
+    - /srv/docker/grafana/sass:/usr/share/grafana/public/sass
+
+  labels:
+        - "traefik.port=3000"
+        - "traefik.enable=true"
+        - "traefik.frontend.entryPoints=http,https"
+        - "traefik.backend=grafana"
+        - "traefik.frontend.rule=Host:cv.jorlando.fr"
+        - "traefik.docker.network=web"
+  networks:
+        - web
+          # - influx
+          #- sql
+       #- internal
+
+ maria-db:
+    container_name: maria-db
+    #ports:
+    #  - "3306:3306"
+    restart: unless-stopped
+    image: mariadb
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ncdb
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: nextcloud
+    volumes:
+      - /srv/docker/mariadb/data:/var/lib/mysql
+        #networks:
+        #- internal
+    networks:
+            #- sql
+      - web
+
+networks:
+ web:
+   driver: bridge
+ sql:
+   driver: bridge
+ influx:
+   driver: bridge
+   #    external:
+   #     name: web
+         # internal:
+         #    driver: bridge
+
